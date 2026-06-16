@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "types": ["jest","node"]  
+  },
+  "include": ["src/**/*", "__tests__/**/*"],  // ← must include __tests__
+  "exclude": ["node_modules", "dist"]
+}

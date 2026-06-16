@@ -1,0 +1,538 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [postgis]
+}
+
+model Country {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  code      String   @unique @db.VarChar(3)
+  createdAt DateTime @default(now())
+  states    State[]
+}
+
+model State {
+  id        Int      @id @default(autoincrement())
+  name      String
+  code      String   @db.VarChar(10)
+  countryId Int
+  createdAt DateTime @default(now())
+  cities    City[]
+  country   Country  @relation(fields: [countryId], references: [id])
+
+  @@unique([code, countryId])
+}
+
+model City {
+  id         Int           @id @default(autoincrement())
+  name       String
+  slug       String        
+  stateId    Int
+  imageUrl   String?
+  isPopular  Boolean       @default(false)
+  createdAt  DateTime      @default(now())
+  state      State         @relation(fields: [stateId], references: [id])
+  localities Locality[]
+  projects   Project[]
+  properties Property[]
+  searches   SavedSearch[]
+
+  
+  @@unique([slug, stateId])
+  @@index([slug])
+}
+
+model Locality {
+  id         Int                       @id @default(autoincrement())
+  name       String
+  slug       String
+  cityId     Int
+  pincode    String?                   @db.VarChar(10)
+  latitude   Float?
+  longitude  Float?
+  createdAt  DateTime                  @default(now())
+  location   Unsupported("geography")?
+  city       City                      @relation(fields: [cityId], references: [id])
+  projects   Project[]
+  properties Property[]
+
+  @@unique([slug, cityId])
+  @@index([cityId])
+  @@index([location], map: "idx_locality_location", type: Gist)
+}
+
+model Builder {
+  id              Int        @id @default(autoincrement())
+  name            String     @unique
+  slug            String     @unique
+  logoUrl         String?
+  description     String?
+  establishedYear Int?
+  totalProjects   Int        @default(0)
+  websiteUrl      String?
+  phone           String?
+  email           String?
+  overallRating   Float?     @default(0)
+  ratingCount     Int        @default(0)
+  isVerified      Boolean    @default(false)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  projects        Project[]
+  properties      Property[]
+
+  @@index([slug])
+}
+
+model Agent {
+  id          Int        @id @default(autoincrement())
+  userId      Int        @unique
+  reraNumber  String?    @unique
+  agencyName  String?
+  licenseUrl  String?
+  isVerified  Boolean    @default(false)
+  rating      Float      @default(0)
+  ratingCount Int        @default(0)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  user        User       @relation(fields: [userId], references: [id])
+  leads       Lead[]
+  properties  Property[]
+}
+
+model Project {
+  id               Int                       @id @default(autoincrement())
+  name             String
+  slug             String                    @unique
+  builderId        Int
+  cityId           Int
+  localityId       Int
+  address          String?
+  latitude         Float?
+  longitude        Float?
+  description      String?
+  minPrice         BigInt?
+  maxPrice         BigInt?
+  possessionStatus PossessionStatus          @default(UNDER_CONSTRUCTION)
+  launchDate       DateTime?
+  possessionDate   DateTime?
+  reraNumber       String?
+  totalUnits       Int?
+  totalTowers      Int?
+  totalFloors      Int?
+  landArea         Float?
+  metaTitle        String?
+  metaDescription  String?
+  isVerified       Boolean                   @default(false)
+  isFeatured       Boolean                   @default(false)
+  isTrending       Boolean                   @default(false)
+  isNewLaunch      Boolean                   @default(false)
+  createdAt        DateTime                  @default(now())
+  updatedAt        DateTime                  @updatedAt
+  location         Unsupported("geography")?
+  isActive         Boolean                   @default(true)
+  floorPlans       FloorPlan[]
+  leads            Lead[]
+  nearbyPlaces     NearbyPlace[]
+  builder          Builder                   @relation(fields: [builderId], references: [id])
+  city             City                      @relation(fields: [cityId], references: [id])
+  locality         Locality                  @relation(fields: [localityId], references: [id])
+  amenities        ProjectAmenity[]
+  images           ProjectImage[]
+  reviews          ProjectReview[]
+  properties       Property[]
+  savedBy          SavedProject[]
+  configs           ProjectConfig[]
+
+  @@index([slug])
+  @@index([cityId, possessionStatus])
+  @@index([builderId])
+  @@index([cityId, isFeatured], map: "idx_project_city_featured")
+  @@index([location], map: "idx_project_location", type: Gist)
+  @@index([possessionStatus, cityId], map: "idx_project_possession")
+}
+
+model ProjectConfig {
+  id         Int      @id @default(autoincrement())
+
+  projectId  Int
+
+  unitType       String   // "2 BHK", "3 BHK"
+
+  buildAreaRange String?
+
+  carpetArea     String?
+
+  bedRoom       String?
+
+  livingArea    String?
+
+  kitchen       String?
+
+  balconies     String?
+
+  floorHeight   String?
+
+  flooring      String?
+
+  facing        String?
+
+  pricePerArea  String?
+
+  price      BigInt?
+
+  units      Int?
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  project    Project  @relation(fields: [projectId], references: [id])
+
+  @@index([projectId])
+}
+
+model ProjectImage {
+  id        Int      @id @default(autoincrement())
+  projectId Int
+  url       String
+  caption   String?
+  isCover   Boolean  @default(false)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+model NearbyPlace {
+  id         Int     @id @default(autoincrement())
+  projectId  Int
+  name       String
+  category   String
+  distanceKm Float
+  travelMins Int?
+  project    Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model Amenity {
+  id       Int              @id @default(autoincrement())
+  name     String           @unique
+  icon     String?
+  category AmenityCategory
+  projects ProjectAmenity[]
+}
+
+model ProjectAmenity {
+  projectId Int
+  amenityId Int
+  amenity   Amenity @relation(fields: [amenityId], references: [id])
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@id([projectId, amenityId])
+}
+
+model FloorPlan {
+  id          Int      @id @default(autoincrement())
+  projectId   Int
+  bhkType     Int
+  name        String
+  carpetArea  Float?
+  builtUpArea Float?
+  superArea   Float?
+  price       BigInt?
+  imageUrl    String?
+  createdAt   DateTime @default(now())
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+model Property {
+  id                Int                       @id @default(autoincrement())
+  title             String
+  slug              String                    @unique
+  description       String?
+  propertyType      PropertyType
+  listingType       ListingType
+  transactionType   TransactionType           @default(NEW_PROPERTY)
+  cityId            Int
+  localityId        Int
+  projectId         Int?
+  address           String?
+  latitude          Float?
+  longitude         Float?
+  bhk               Int?
+  bathrooms         Int?
+  balconies         Int?
+  carpetArea        Float?
+  builtUpArea       Float?
+  superArea         Float?
+  totalFloors       Int?
+  floorNumber       Int?
+  price             BigInt?
+  pricePerSqFt      Float?
+  isNegotiable      Boolean                   @default(false)
+  maintenanceCharge Float?
+  securityDeposit   Float?
+  possessionStatus  PossessionStatus          @default(READY_TO_MOVE)
+  furnishingStatus  FurnishingStatus          @default(UNFURNISHED)
+  availableFrom     DateTime?
+  features          String[]
+  facing            String?
+  overlooking       String[]
+  agentId           Int?
+  ownerId           Int
+  isVerified        Boolean                   @default(false)
+  isFeatured        Boolean                   @default(false)
+  isActive          Boolean                   @default(true)
+  viewCount         Int                       @default(0)
+  metaTitle         String?
+  metaDescription   String?
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+  location          Unsupported("geography")?
+  builderId         Int?
+  builder           Builder?                   @relation(fields: [builderId], references: [id])
+  leads             Lead[]
+  agent             Agent?                    @relation(fields: [agentId], references: [id])
+  city              City                      @relation(fields: [cityId], references: [id])
+  locality          Locality                  @relation(fields: [localityId], references: [id])
+  owner             User                      @relation(fields: [ownerId], references: [id])
+  project           Project?                  @relation(fields: [projectId], references: [id])
+  images            PropertyImage[]
+  savedBy           SavedProperty[]
+
+  @@index([slug])
+  @@index([cityId, listingType, propertyType])
+  @@index([localityId])
+  @@index([price])
+  @@index([bhk])
+  @@index([isActive, isFeatured])
+  @@index([cityId, listingType, isActive], map: "idx_property_city_listing")
+  @@index([localityId, isActive], map: "idx_property_locality_active")
+  @@index([location], map: "idx_property_location", type: Gist)
+}
+
+model PropertyImage {
+  id         Int      @id @default(autoincrement())
+  propertyId Int
+  url        String
+  caption    String?
+  isCover    Boolean  @default(false)
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@index([propertyId])
+}
+
+model User {
+  id              Int              @id @default(autoincrement())
+  phone           String?          @unique @db.VarChar(15)
+  email           String?          @unique
+  name            String?
+  avatarUrl       String?
+  role            UserRole         @default(BUYER)
+  isActive        Boolean          @default(true)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  agent           Agent?
+  leads           Lead[]           @relation("BuyerLeads")
+  otps            Otp[]
+  reviews         ProjectReview[]
+  properties      Property[]
+  recentlyViewed  RecentlyViewed[]
+  savedProjects   SavedProject[]
+  savedProperties SavedProperty[]
+  savedSearches   SavedSearch[]
+}
+
+model Otp {
+  id        Int        @id @default(autoincrement())
+  phone     String     @db.VarChar(15)
+  code      String     @db.VarChar(6)
+  purpose   OtpPurpose @default(LOGIN)
+  userId    Int?
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime   @default(now())
+  user      User?      @relation(fields: [userId], references: [id])
+
+  @@index([phone, code])
+  @@index([expiresAt])
+}
+
+model Lead {
+  id            Int        @id @default(autoincrement())
+  buyerId       Int?
+  guestName     String?
+  guestPhone    String?    @db.VarChar(15)
+  guestEmail    String?
+  propertyId    Int?
+  projectId     Int?
+  agentId       Int?
+  message       String?
+  budget        BigInt?
+  bhkPreference Int[]
+  status        LeadStatus @default(NEW)
+  source        String?
+  followUpAt    DateTime?
+  notes         String?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  agent         Agent?     @relation(fields: [agentId], references: [id])
+  buyer         User?      @relation("BuyerLeads", fields: [buyerId], references: [id])
+  project       Project?   @relation(fields: [projectId], references: [id])
+  property      Property?  @relation(fields: [propertyId], references: [id])
+
+  @@index([projectId, status])
+  @@index([propertyId, status])
+  @@index([agentId])
+  @@index([guestPhone])
+  @@index([agentId, status], map: "idx_lead_agent_status")
+  @@index([buyerId, createdAt(sort: Desc)], map: "idx_lead_buyer")
+}
+
+model SavedProperty {
+  userId     Int
+  propertyId Int
+  savedAt    DateTime @default(now())
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, propertyId])
+}
+
+model SavedProject {
+  userId    Int
+  projectId Int
+  savedAt   DateTime @default(now())
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, projectId])
+}
+
+model SavedSearch {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  cityId    Int?
+  name      String?
+  filters   Json
+  createdAt DateTime @default(now())
+  city      City?    @relation(fields: [cityId], references: [id])
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model RecentlyViewed {
+  id         Int      @id @default(autoincrement())
+  userId     Int
+  propertyId Int?
+  projectId  Int?
+  viewedAt   DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, viewedAt])
+}
+
+model ProjectReview {
+  id                 Int      @id @default(autoincrement())
+  projectId          Int
+  userId             Int
+  rating             Int
+  title              String?
+  body               String?
+  constructionRating Int?
+  amenitiesRating    Int?
+  locationRating     Int?
+  valueRating        Int?
+  isVerified         Boolean  @default(false)
+  createdAt          DateTime @default(now())
+  project            Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user               User     @relation(fields: [userId], references: [id])
+
+  @@unique([projectId, userId])
+  @@index([projectId])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model spatial_ref_sys {
+  srid      Int     @id
+  auth_name String? @db.VarChar(256)
+  auth_srid Int?
+  srtext    String? @db.VarChar(2048)
+  proj4text String? @db.VarChar(2048)
+}
+
+enum PropertyType {
+  APARTMENT
+  VILLA
+  PLOT
+  INDEPENDENT_HOUSE
+  BUILDER_FLOOR
+  PENTHOUSE
+  STUDIO
+  COMMERCIAL_OFFICE
+  COMMERCIAL_SHOP
+  WAREHOUSE
+}
+
+enum ListingType {
+  BUY
+  RENT
+  PG
+}
+
+enum PossessionStatus {
+  READY_TO_MOVE
+  UNDER_CONSTRUCTION
+  NEW_LAUNCH
+}
+
+enum FurnishingStatus {
+  UNFURNISHED
+  SEMI_FURNISHED
+  FULLY_FURNISHED
+}
+
+enum TransactionType {
+  NEW_PROPERTY
+  RESALE
+}
+
+enum UserRole {
+  BUYER
+  AGENT
+  BUILDER
+  ADMIN
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  SITE_VISIT_SCHEDULED
+  NEGOTIATING
+  CONVERTED
+  LOST
+}
+
+enum OtpPurpose {
+  LOGIN
+  SIGNUP
+  RESET
+}
+
+enum AmenityCategory {
+  SPORTS
+  LIFESTYLE
+  SAFETY
+  CONNECTIVITY
+  GREEN
+}
