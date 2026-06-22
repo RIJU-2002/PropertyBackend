@@ -1004,4 +1004,77 @@
  *         description: "{ meters: 11234, label: '11.2 km' }"
  */
 
+/**
+ * @swagger
+ * /geo/geocode:
+ *   post:
+ *     summary: Convert address into location details
+ *     description: |
+ *       Takes an address string and returns:
+ *       - formatted address
+ *       - latitude
+ *       - longitude
+ *       - city
+ *       - locality
+ *       - state
+ *       - stateId (if found in database)
+ *     tags: [Location]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - address
+ *             properties:
+ *               address:
+ *                 type: string
+ *                 example: "Patia Square, Bhubaneswar, Odisha"
+ *     responses:
+ *       200:
+ *         description: Location details fetched successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     address:
+ *                       type: string
+ *                       example: "Patia Square, Bhubaneswar, Odisha 751024, India"
+ *                     latitude:
+ *                       type: number
+ *                       example: 20.3554
+ *                     longitude:
+ *                       type: number
+ *                       example: 85.8245
+ *                     localityName:
+ *                       type: string
+ *                       example: "Patia"
+ *                     cityName:
+ *                       type: string
+ *                       example: "Bhubaneswar"
+ *                     stateName:
+ *                       type: string
+ *                       example: "Odisha"
+ *                     stateId:
+ *                       type: integer
+ *                       example: 1
+ *                     country:
+ *                       type: string
+ *                       example: "India"
+ *       400:
+ *         description: Invalid address
+ *       404:
+ *         description: Location not found
+ *       500:
+ *         description: Internal server error
+ */
+
 export {};

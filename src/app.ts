@@ -17,6 +17,8 @@ import projectRoutes from "./routes/project.routes";
 import userRoutes from "./routes/user.routes";
 import localityRoutes from "./routes/locality.routes";
 import states from "./routes/state.routes";
+import amenityRoutes from "./routes/amenity.routes";
+import geocodeRoutes from "./routes/geocode.routes";
 
 
 const app = express();
@@ -89,6 +91,8 @@ app.use("/projects", projectRoutes);
 app.use("/users", userRoutes);
 app.use("/locality", localityRoutes);
 app.use("/states",states )
+app.use("/amenities", amenityRoutes);
+app.use("/geo", geocodeRoutes);
 
 // ============================================================
 // 404 HANDLER

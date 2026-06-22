@@ -118,8 +118,8 @@ const projectBaseSchema = z.object({
     "UNDER_CONSTRUCTION"
   ),
 
-  launchDate: z.string().datetime().optional(),
-  possessionDate: z.string().datetime().optional(),
+  launchDate: z.string().optional(),
+  possessionDate: z.string().optional(),
 
   // ── Details ───────────────────────────────────────────────
   reraNumber: z
