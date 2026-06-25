@@ -44,22 +44,31 @@ const parseFormFields = (body: any) => {
   return {
     name: body.name ?? body.title ?? undefined,
 
-    // IDs (preferred)
     builderId: toNumber(body.builderId),
     cityId: toNumber(body.cityId),
     localityId: toNumber(body.localityId),
     stateId: toNumber(body.stateId),
 
-    // Names (fallback creation)
     builderName: body.builderName ?? undefined,
     cityName: body.cityName ?? body.city ?? undefined,
     localityName: body.localityName ?? body.locality ?? undefined,
 
-    minPrice: body.minPrice ?? undefined,
-    maxPrice: body.maxPrice ?? undefined,
+    minPrice: body.minPrice ? Number(body.minPrice) : undefined,
+    maxPrice: body.maxPrice ? Number(body.maxPrice) : undefined,
 
     description: body.description ?? undefined,
     address: body.address ?? undefined,
+
+    // ADD THESE
+    reraNumber: body.reraNumber ?? undefined,
+    launchDate: body.launchDate ?? undefined,
+    possessionDate: body.possessionDate ?? undefined,
+
+    totalUnits: toNumber(body.totalUnits),
+    availableUnits: toNumber(body.availableUnits),
+
+    metaTitle: body.metaTitle ?? undefined,
+    metaDescription: body.metaDescription ?? undefined,
 
     latitude: toNumber(body.latitude),
     longitude: toNumber(body.longitude),
@@ -89,6 +98,7 @@ export const createProject = async (req: Request, res: Response) => {
     console.log("PARSED BODY:", parsed);
     console.log("FILES:", req.files);
     const validatedData = createProjectSchema.parse(parsed);
+    console.log("VALIDATED DATA:", validatedData);
     const files         = (req.files as Express.Multer.File[]) ?? [];
 
     if (files.length > 20) {
