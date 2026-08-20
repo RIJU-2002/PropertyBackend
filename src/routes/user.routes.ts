@@ -1,5 +1,6 @@
 import { Router } from "express";
 import {
+  createUserController,
   getProfile,
   updateProfile,
   getSavedProperties,
@@ -7,9 +8,11 @@ import {
   getSavedProjects,
   saveProject,
 } from "../controllers/user.controller";
-import { protect } from "../middlewares/auth.middleware";
+import { protect, adminOnly } from "../middlewares/auth.middleware";
 
 const router = Router();
+
+router.post("/", protect, adminOnly, createUserController);
 
 // All user routes require login
 router.get("/me",                                  protect, getProfile);

@@ -160,6 +160,13 @@ export const cleanTestData = async () => {
   // Don't delete core test data (country, state, city, locality, builder, project, user, property)
   // as they are referenced by foreign keys in other tests
   await prisma.lead.deleteMany();
+  await prisma.agent.deleteMany({
+    where: {
+      user: {
+        phone: { not: "+919999999999" },
+      },
+    },
+  });
   await prisma.otp.deleteMany();
   await prisma.savedProperty.deleteMany();
   await prisma.savedProject.deleteMany();
