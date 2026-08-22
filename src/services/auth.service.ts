@@ -1,6 +1,7 @@
 import prisma from "../lib/prisma";
 import jwt from "jsonwebtoken";
-import { sendSms } from "./sms.service";
+import { randomInt } from "crypto";
+import { isDummyOtp, sendSms } from "./sms.service";
 
 const OTP_EXPIRY_MINUTES = 10;
 const JWT_EXPIRY          = "7d";
@@ -10,13 +11,10 @@ const JWT_EXPIRY          = "7d";
 // ============================================================
 
 const generateOtp = (): string => {
-    console.log('OTP sending');
-  // In development → always return 123456 so you never need SMS
-  if (process.env.NODE_ENV !== "production") {
+  if (isDummyOtp()) {
     return "123456";
   }
-  // Production → random 6-digit number
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  return randomInt(100000, 1000000).toString();
 };
 
 const generateToken = (userId: number, role: string): string => {

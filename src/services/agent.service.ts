@@ -205,6 +205,8 @@ interface UpdateAgentInput {
   reraNumber?: string;
   agencyName?: string;
   licenseUrl?: string;
+  name?: string;
+  email?: string;
 }
 
 export const updateAgent = async (
@@ -237,26 +239,50 @@ export const updateAgent = async (
     }
   }
 
-  return prisma.agent.update({
-    where: {
-      id: agentId,
-    },
-    data: {
-      reraNumber: data.reraNumber,
-      agencyName: data.agencyName,
-      licenseUrl: data.licenseUrl,
-    },
-    include: {
-      user: {
-        select: {
-          id: true,
-          name: true,
-          phone: true,
-          email: true,
+  if (data.email) {
+    const emailTaken = await prisma.user.findFirst({
+      where: {
+        email: data.email,
+        NOT: { id: agent.userId },
+      },
+      select: { id: true },
+    });
+
+    if (emailTaken) {
+      throw new Error("EMAIL_TAKEN");
+    }
+  }
+
+  const [, updated] = await prisma.$transaction([
+    prisma.user.update({
+      where: { id: agent.userId },
+      data: {
+        ...(data.name ? { name: data.name } : {}),
+        ...(data.email ? { email: data.email } : {}),
+      },
+    }),
+    prisma.agent.update({
+      where: { id: agentId },
+      data: {
+        ...(data.reraNumber !== undefined ? { reraNumber: data.reraNumber } : {}),
+        ...(data.agencyName !== undefined ? { agencyName: data.agencyName } : {}),
+        ...(data.licenseUrl !== undefined ? { licenseUrl: data.licenseUrl } : {}),
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            phone: true,
+            email: true,
+            role: true,
+          },
         },
       },
-    },
-  });
+    }),
+  ]);
+
+  return updated;
 };
 
 export const updateAgentActiveStatus = async (

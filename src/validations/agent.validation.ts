@@ -36,6 +36,19 @@ export const updateAgentSchema = z.object({
     .string()
     .url()
     .optional(),
+
+  name: z
+    .string()
+    .trim()
+    .min(2)
+    .max(100)
+    .optional(),
+
+  email: z
+    .string()
+    .trim()
+    .email("Enter a valid email address")
+    .optional(),
 });
 
 export const updateMyAgentProfileSchema = z.object({

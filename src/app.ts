@@ -19,6 +19,9 @@ import localityRoutes from "./routes/locality.routes";
 import states from "./routes/state.routes";
 import amenityRoutes from "./routes/amenity.routes";
 import geocodeRoutes from "./routes/geocode.routes";
+import articleRoutes from "./routes/article.routes";
+import analyticsRoutes from "./routes/analytics.routes";
+import agentsRoutes from "./routes/agent.route";
 
 
 const app = express();
@@ -93,7 +96,9 @@ app.use("/locality", localityRoutes);
 app.use("/states",states )
 app.use("/amenities", amenityRoutes);
 app.use("/geo", geocodeRoutes);
-
+app.use('/articles',articleRoutes);
+app.use("/analytics",analyticsRoutes);
+app.use("/agents",agentsRoutes)
 // ============================================================
 // 404 HANDLER
 // ============================================================

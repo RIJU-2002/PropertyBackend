@@ -5,11 +5,16 @@ import {
   fetchMyLeads,
   fetchAgentLeads,
   updateLeadStatus,
+  fetchAdminLeads,
+  assignLeadToAgent,
+  fetchLeadSummary,
 } from "../services/lead.service";
 import {
   submitLeadSchema,
   updateLeadStatusSchema,
+  assignLeadSchema,
 } from "../validations/lead.validation";
+import prisma from "../lib/prisma";
 
 // ============================================================
 // HELPER
@@ -57,6 +62,12 @@ export const createLead = async (req: Request, res: Response) => {
 
     if (error.message === "MISSING_TARGET") {
       return res.status(400).json({ success: false, message: "Please select a property or project to enquire about" });
+    }
+    if (error.message === "AGENT_NOT_FOUND") {
+      return res.status(404).json({ success: false, message: "Agent not found" });
+    }
+    if (error.message === "AGENT_INACTIVE") {
+      return res.status(400).json({ success: false, message: "This agent is inactive" });
     }
     if (error.message === "GUEST_PHONE_REQUIRED") {
       return res.status(400).json({ success: false, message: "Please provide your phone number" });
@@ -108,22 +119,120 @@ export const getMyLeads = async (req: Request, res: Response) => {
 
 export const getAgentLeads = async (req: Request, res: Response) => {
   try {
-    const agentId = (req as any).user?.id;
+    const userId = (req as any).user?.id;
 
-    if (!agentId) {
+    if (!userId) {
       return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    const agent = await prisma.agent.findUnique({
+      where: { userId },
+      select: { id: true, isActive: true },
+    });
+
+    if (!agent) {
+      return res.status(404).json({
+        success: false,
+        message: "Agent profile not found",
+      });
+    }
+
+    if (!agent.isActive) {
+      return res.status(403).json({
+        success: false,
+        message: "Agent account is inactive",
+      });
     }
 
     const status = req.query.status as string | undefined;
     const page   = Number(req.query.page)  || 1;
     const limit  = Number(req.query.limit) || 20;
 
-    const result = await fetchAgentLeads(agentId, status, page, limit);
+    const result = await fetchAgentLeads(agent.id, status, page, limit);
 
     return res.json({ success: true, ...safe(result) });
   } catch (error) {
     console.error("GET AGENT LEADS ERROR:", error);
     return res.status(500).json({ success: false, message: "Failed to fetch leads" });
+  }
+};
+
+export const getAdminLeads = async (req: Request, res: Response) => {
+  try {
+    const status = typeof req.query.status === "string" ? req.query.status : undefined;
+    const agentId = req.query.agentId ? Number(req.query.agentId) : undefined;
+    const unassigned = req.query.unassigned === "true";
+    const page = Math.max(Number(req.query.page) || 1, 1);
+    const limit = Math.min(Math.max(Number(req.query.limit) || 20, 1), 100);
+
+    if (agentId !== undefined && (!Number.isInteger(agentId) || agentId <= 0)) {
+      return res.status(400).json({ success: false, message: "Invalid agent ID" });
+    }
+
+    const result = await fetchAdminLeads(page, limit, status, agentId, unassigned);
+
+    return res.json({
+      success: true,
+      data: safe(result.leads),
+      pagination: result.pagination,
+    });
+  } catch (error) {
+    console.error("GET ADMIN LEADS ERROR:", error);
+    return res.status(500).json({ success: false, message: "Failed to fetch leads" });
+  }
+};
+
+export const getLeadSummary = async (_req: Request, res: Response) => {
+  try {
+    const summary = await fetchLeadSummary();
+    return res.json({ success: true, data: safe(summary) });
+  } catch (error) {
+    console.error("GET LEAD SUMMARY ERROR:", error);
+    return res.status(500).json({ success: false, message: "Failed to fetch lead summary" });
+  }
+};
+
+export const assignLead = async (req: Request, res: Response) => {
+  try {
+    const leadId = Number(req.params.id);
+
+    if (!Number.isInteger(leadId) || leadId <= 0) {
+      return res.status(400).json({ success: false, message: "Invalid lead ID" });
+    }
+
+    const { agentId } = assignLeadSchema.parse(req.body);
+    const lead = await assignLeadToAgent(leadId, agentId);
+
+    return res.json({
+      success: true,
+      message: "Lead assigned to agent",
+      data: safe(lead),
+    });
+  } catch (error: any) {
+    console.error("ASSIGN LEAD ERROR:", error);
+
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({
+        success: false,
+        message: "Validation failed",
+        errors: error.issues.map((i) => ({
+          field: i.path.join("."),
+          message: i.message,
+        })),
+      });
+    }
+
+    if (error.message === "LEAD_NOT_FOUND") {
+      return res.status(404).json({ success: false, message: "Lead not found" });
+    }
+    if (error.message === "AGENT_NOT_FOUND") {
+      return res.status(404).json({ success: false, message: "Agent not found" });
+    }
+    if (error.message === "AGENT_INACTIVE") {
+      return res.status(400).json({ success: false, message: "This agent is inactive" });
+    }
+
+    return res.status(500).json({ success: false, message: "Failed to assign lead" });
   }
 };
 

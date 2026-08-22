@@ -15,8 +15,8 @@ const LeadStatusEnum = z.enum([
 
 export const submitLeadSchema = z.object({
   // Target — at least one required (validated in service)
-  propertyId: z.number().int().positive().optional(),
-  projectId:  z.number().int().positive().optional(),
+  propertyId: z.coerce.number().int().positive().optional(),
+  projectId:  z.coerce.number().int().positive().optional(),
 
   // Guest fields — required only when not logged in (validated in service)
   guestName:  z.string().trim().min(2).max(100).optional(),
@@ -24,7 +24,10 @@ export const submitLeadSchema = z.object({
     .string()
     .regex(/^[6-9]\d{9}$/, "Enter a valid 10-digit Indian mobile number")
     .optional(),
-  guestEmail: z.string().email().optional(),
+  guestEmail: z.preprocess(
+    (value) => (value === "" || value === null ? undefined : value),
+    z.string().email().optional()
+  ),
 
   // Lead details
   message: z
@@ -44,6 +47,8 @@ export const submitLeadSchema = z.object({
     .default([]),
 
   source: z.string().max(50).optional(),
+
+  agentId: z.number().int().positive().optional(),
 });
 
 // ============================================================
@@ -56,5 +61,10 @@ export const updateLeadStatusSchema = z.object({
   followUpAt: z.string().datetime().optional(),
 });
 
-export type SubmitLeadInput     = z.infer<typeof submitLeadSchema>;
+export const assignLeadSchema = z.object({
+  agentId: z.number().int().positive(),
+});
+
+export type SubmitLeadInput = z.infer<typeof submitLeadSchema>;
+export type AssignLeadInput = z.infer<typeof assignLeadSchema>;
 export type UpdateLeadStatusInput = z.infer<typeof updateLeadStatusSchema>;

@@ -1,6 +1,7 @@
 import prisma from "../lib/prisma"; // ← your shared instance
 
 import { Prisma } from "@prisma/client";
+import { cacheRemember, cacheKeyFromQuery } from "../utils/cache";
  
 // ============================================================
 // TYPES
@@ -107,7 +108,10 @@ export const fetchProperties = async (query: PropertyQuery) => {
   // ============================================================
   // QUERY
   // ============================================================
- 
+
+  const cacheKey = cacheKeyFromQuery("properties:list", query as Record<string, unknown>);
+
+  return cacheRemember(cacheKey, 60, async () => {
   const [properties, total] = await Promise.all([
     prisma.property.findMany({
       where,
@@ -138,6 +142,7 @@ export const fetchProperties = async (query: PropertyQuery) => {
       hasPrev:    currentPage > 1,
     },
   };
+  });
 };
 
 

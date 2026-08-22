@@ -96,6 +96,7 @@ model Agent {
   agencyName  String?
   licenseUrl  String?
   isVerified  Boolean    @default(false)
+  isActive    Boolean    @default(true)
   rating      Float      @default(0)
   ratingCount Int        @default(0)
   createdAt   DateTime   @default(now())
@@ -123,11 +124,28 @@ model Project {
   possessionDate   DateTime?
   reraNumber       String?
   totalUnits       Int?
-  totalTowers      Int?
+  projectType      PropertyType             @default(APARTMENT)
   totalFloors      Int?
   landArea         Float?
   metaTitle        String?
   metaDescription  String?
+
+  
+  // ── INPUT FIELDS (Admin fills these) ──
+  expectedRentMonthly   Int?      // Expected monthly rent in ₹
+  appreciationRate      Float?    // Annual appreciation % (e.g., 5.5)
+  rentalDemand          String?   // "HIGH", "MEDIUM", "LOW"
+  nearbyInfrastructure  String?   // Metro, airport, school info
+  
+  // ── CALCULATED FIELDS (Computed by backend) ──
+  rentalYield           Float?    // (rent × 12) / price × 100
+  investmentScore       Int?      // 0-100 score
+  paybackYears          Float?    // Years to recover investment
+  
+  // ── DISPLAY FIELDS ──
+  isInvestmentHotspot   Boolean   @default(false)
+  investmentTagline     String?   // "8.2% Rental Yield | Metro Coming Soon"
+
   isVerified       Boolean                   @default(false)
   isFeatured       Boolean                   @default(false)
   isTrending       Boolean                   @default(false)
@@ -167,6 +185,8 @@ model ProjectConfig {
   buildAreaRange String?
 
   carpetArea     String?
+
+  bastu_Info    String?
 
   bedRoom       String?
 
@@ -222,7 +242,7 @@ model NearbyPlace {
 model Amenity {
   id          Int              @id @default(autoincrement())
   name        String           @unique
-  slug        String           @unique
+  //slug        String           @unique
   icon        String?
   category    AmenityCategory
   isActive    Boolean          @default(true)
@@ -539,4 +559,48 @@ enum AmenityCategory {
   SAFETY
   CONNECTIVITY
   GREEN
+}
+
+
+
+enum ArticleStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+model Article {
+  id            String        @id @default(uuid())
+  title         String
+  slug          String        @unique
+  excerpt       String?
+  content       String        // rich text / HTML / markdown
+  coverImage    String?       // Cloudinary URL
+  status        ArticleStatus @default(DRAFT)
+  publishedAt   DateTime?
+  readTimeMin   Int?          // computed on save
+  views         Int           @default(0)
+
+  categoryId    String?
+  category      ArticleCategory? @relation(fields: [categoryId], references: [id])
+
+  tags          ArticleTag[]
+
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  deletedAt     DateTime?     // soft delete
+}
+
+model ArticleCategory {
+  id       String    @id @default(uuid())
+  name     String
+  slug     String    @unique
+  articles Article[]
+}
+
+model ArticleTag {
+  id       String    @id @default(uuid())
+  name     String    @unique
+  slug     String    @unique
+  articles Article[]
 }

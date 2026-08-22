@@ -9,16 +9,13 @@ import Redis from "ioredis";
 
 const redis = new Redis(process.env.REDIS_URL!, {
   enableReadyCheck: true,
-  maxRetriesPerRequest: 3,
+  maxRetriesPerRequest: 2,
+  connectTimeout: 2000,
+  commandTimeout: 1000,
+  enableOfflineQueue: false,
 
   retryStrategy(times) {
-    console.log(`🔄 Redis reconnect attempt ${times}`);
-
-    // Stop after 10 retries
-    if (times > 10) {
-      return null;
-    }
-
+    if (times > 10) return null;
     return Math.min(times * 500, 3000);
   },
 });

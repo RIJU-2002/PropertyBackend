@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { z } from "zod";
 import { sendOtp, verifyOtp, getMe } from "../services/auth.service";
+import { isDummyOtp } from "../services/sms.service";
 
 // ============================================================
 // VALIDATION SCHEMAS
@@ -35,16 +36,22 @@ export const handleSendOtp = async (req: Request, res: Response) => {
 
     return res.json({
       success: true,
-      message:
-        process.env.NODE_ENV === "production"
-          ? "OTP sent to your mobile number"
-          : "OTP sent (dev mode: use 123456)",
+      message: isDummyOtp()
+        ? "OTP sent (dummy mode: use 123456)"
+        : "OTP sent to your mobile number",
     });
   } catch (error: any) {
     if (error instanceof z.ZodError) {
       return res.status(400).json({
         success: false,
         message: error.issues[0].message,
+      });
+    }
+
+    if (error.message === "SMS_NOT_CONFIGURED") {
+      return res.status(503).json({
+        success: false,
+        message: "SMS is not configured. Add FAST2SMS_API_KEY or MSG91 keys in api/.env.",
       });
     }
 

@@ -250,6 +250,13 @@ export const updateAgentController = async (
           message: "RERA number already exists",
         });
 
+      case "EMAIL_TAKEN":
+        return res.status(409).json({
+          success: false,
+          code: "EMAIL_TAKEN",
+          message: "This email is already in use",
+        });
+
       default:
         return res.status(500).json({
           success: false,

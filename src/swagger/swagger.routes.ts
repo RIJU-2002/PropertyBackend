@@ -1077,4 +1077,318 @@
  *         description: Internal server error
  */
 
+
+/**
+ * @swagger
+ * tags:
+ *   - name: Articles
+ *     description: Article / Blog Management
+ */
+
+// ============================================================
+// ARTICLES
+// ============================================================
+
+/**
+ * @swagger
+ * /articles/public:
+ *   get:
+ *     summary: Get all published articles
+ *     tags: [Articles]
+ *     parameters:
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: tag
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: categoryId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *     responses:
+ *       200:
+ *         description: Published articles
+ */
+
+/**
+ * @swagger
+ * /articles/public/{slug}:
+ *   get:
+ *     summary: Get article by slug
+ *     tags: [Articles]
+ *     parameters:
+ *       - in: path
+ *         name: slug
+ *         required: true
+ *         schema:
+ *           type: string
+ *         example: buying-a-home-in-bhubaneswar
+ *     responses:
+ *       200:
+ *         description: Article details
+ *       404:
+ *         description: Article not found
+ */
+
+/**
+ * @swagger
+ * /articles/categories:
+ *   get:
+ *     summary: Get all article categories
+ *     tags: [Articles]
+ *     responses:
+ *       200:
+ *         description: Categories list
+ */
+
+/**
+ * @swagger
+ * /articles/tags:
+ *   get:
+ *     summary: Get all article tags
+ *     tags: [Articles]
+ *     responses:
+ *       200:
+ *         description: Tags list
+ */
+
+/**
+ * @swagger
+ * /articles:
+ *   post:
+ *     summary: Create a new article
+ *     tags: [Articles]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - title
+ *               - content
+ *             properties:
+ *               title:
+ *                 type: string
+ *                 example: Buying Your First Home
+ *               excerpt:
+ *                 type: string
+ *               content:
+ *                 type: string
+ *               categoryId:
+ *                 type: string
+ *                 format: uuid
+ *               tags:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                   format: uuid
+ *               coverImage:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       201:
+ *         description: Article created successfully
+ */
+
+/**
+ * @swagger
+ * /articles:
+ *   get:
+ *     summary: Get all articles (Admin)
+ *     tags: [Articles]
+ *     parameters:
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [DRAFT, PUBLISHED]
+ *       - in: query
+ *         name: categoryId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: tag
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: All articles
+ */
+
+/**
+ * @swagger
+ * /articles/{id}:
+ *   get:
+ *     summary: Get article by ID
+ *     tags: [Articles]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Article found
+ *       404:
+ *         description: Article not found
+ */
+
+/**
+ * @swagger
+ * /articles/{id}:
+ *   put:
+ *     summary: Update article
+ *     tags: [Articles]
+ *     requestBody:
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               title:
+ *                 type: string
+ *               slug:
+ *                 type: string
+ *               excerpt:
+ *                 type: string
+ *               content:
+ *                 type: string
+ *               categoryId:
+ *                 type: string
+ *                 format: uuid
+ *               tags:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                   format: uuid
+ *               coverImage:
+ *                 type: string
+ *                 format: binary
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Article updated
+ */
+
+/**
+ * @swagger
+ * /articles/{id}:
+ *   delete:
+ *     summary: Delete article
+ *     tags: [Articles]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Article deleted
+ */
+
+/**
+ * @swagger
+ * /articles/{id}/publish:
+ *   post:
+ *     summary: Publish article
+ *     tags: [Articles]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Article published
+ */
+
+/**
+ * @swagger
+ * /articles/{id}/unpublish:
+ *   post:
+ *     summary: Unpublish article
+ *     tags: [Articles]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Article moved back to draft
+ */
+
+/**
+ * @swagger
+ * /articles/{id}/cover:
+ *   post:
+ *     summary: Upload or replace article cover image
+ *     tags: [Articles]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - coverImage
+ *             properties:
+ *               coverImage:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       200:
+ *         description: Cover image uploaded successfully
+ */
+
+
 export {};
