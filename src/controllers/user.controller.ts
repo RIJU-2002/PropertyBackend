@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { z } from "zod";
 import {
+  createUser,
   fetchUserProfile,
   updateUserProfile,
   fetchSavedProperties,
@@ -8,7 +9,7 @@ import {
   fetchSavedProjects,
   toggleSaveProject,
 } from "../services/user.service";
-import { updateProfileSchema } from "../validations/user.validation";
+import { createUserSchema, updateProfileSchema } from "../validations/user.validation";
 
 // ============================================================
 // HELPER
@@ -20,6 +21,78 @@ const safe = (data: any) =>
       typeof value === "bigint" ? value.toString() : value
     )
   );
+
+// ============================================================
+// POST /users
+// Admin: create BUYER / ADMIN, or create/promote AGENT
+// ============================================================
+
+export const createUserController = async (req: Request, res: Response) => {
+  try {
+    const validatedData = createUserSchema.parse(req.body);
+    const result = await createUser(validatedData);
+
+    return res.status(201).json({
+      success: true,
+      message:
+        validatedData.role === "AGENT"
+          ? "Agent created successfully"
+          : "User created successfully",
+      data: safe(result),
+    });
+  } catch (error: any) {
+    console.error("CREATE USER ERROR:", error);
+
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({
+        success: false,
+        message: "Validation failed",
+        errors: error.issues.map((i) => ({
+          field: i.path.join("."),
+          message: i.message,
+        })),
+      });
+    }
+
+    switch (error.message) {
+      case "PHONE_TAKEN":
+        return res.status(409).json({
+          success: false,
+          code: "PHONE_TAKEN",
+          message: "A user with this phone number already exists",
+        });
+      case "EMAIL_TAKEN":
+        return res.status(409).json({
+          success: false,
+          code: "EMAIL_TAKEN",
+          message: "This email is already in use",
+        });
+      case "AGENT_ALREADY_EXISTS":
+        return res.status(409).json({
+          success: false,
+          code: "AGENT_ALREADY_EXISTS",
+          message: "This user is already registered as an agent",
+        });
+      case "RERA_ALREADY_EXISTS":
+        return res.status(409).json({
+          success: false,
+          code: "RERA_ALREADY_EXISTS",
+          message: "RERA number already exists",
+        });
+      case "CANNOT_CONVERT_ADMIN":
+        return res.status(409).json({
+          success: false,
+          code: "CANNOT_CONVERT_ADMIN",
+          message: "An admin account cannot be converted to an agent",
+        });
+      default:
+        return res.status(500).json({
+          success: false,
+          message: "Failed to create user",
+        });
+    }
+  }
+};
 
 // ============================================================
 // GET /users/me

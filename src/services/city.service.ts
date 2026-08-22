@@ -1,5 +1,5 @@
 import prisma from "../lib/prisma";
-import { cacheRemember } from "../utils/cache";
+import { cacheRemember, cacheKeyFromQuery } from "../utils/cache";
 // ============================================================
 // GET ALL CITIES
 // Used for: homepage city selector, search dropdown
@@ -39,7 +39,8 @@ export const fetchCities = async (onlyPopular?: boolean) => {
 // ============================================================
 
 export const fetchCityBySlug = async (slug: string) => {
-  return prisma.city.findFirst({
+  return cacheRemember(`city:${slug}`, 1800, () =>
+    prisma.city.findFirst({
     where: { slug },
     select: {
       id: true,
@@ -54,7 +55,8 @@ export const fetchCityBySlug = async (slug: string) => {
         },
       },
     },
-  });
+  })
+  );
 };
 
 // ============================================================
@@ -63,6 +65,7 @@ export const fetchCityBySlug = async (slug: string) => {
 // ============================================================
 
 export const fetchLocalitiesByCity = async (citySlug: string) => {
+  return cacheRemember(`localities:${citySlug}`, 1800, async () => {
   const city = await prisma.city.findFirst({
     where: { slug: citySlug },
     select: {
@@ -88,6 +91,7 @@ export const fetchLocalitiesByCity = async (citySlug: string) => {
   });
 
   return { city, localities };
+  });
 };
 
 // ============================================================
@@ -99,8 +103,10 @@ export const fetchLocalitiesByCity = async (citySlug: string) => {
 export const searchLocations = async (query: string) => {
   if (!query || query.trim().length < 2) return { cities: [], localities: [] };
 
-  const q = query.trim();
+  const q = query.trim().toLowerCase();
+  const cacheKey = cacheKeyFromQuery("location-search", { q });
 
+  return cacheRemember(cacheKey, 60, async () => {
   const [cities, localities] = await Promise.all([
     prisma.city.findMany({
       where: {
@@ -131,6 +137,7 @@ export const searchLocations = async (query: string) => {
   ]);
 
   return { cities, localities };
+  });
 };
 
 

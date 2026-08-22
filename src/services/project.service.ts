@@ -1,6 +1,6 @@
 import prisma from "../lib/prisma";
-import { Prisma } from "@prisma/client";
-import { cacheRemember } from "../utils/cache";
+import { Prisma ,PropertyType} from "@prisma/client";
+import { cacheRemember, cacheKeyFromQuery } from "../utils/cache";
 // ============================================================
 // TYPES
 // ============================================================
@@ -12,6 +12,7 @@ interface ProjectQuery {
   locality?:         string;
   builderId?:        string;
   possessionStatus?: string;
+  propertyType?:    string;
   minPrice?:         string;
   maxPrice?:         string;
   bhk?:              string;   // filter by available BHK types in floor plans
@@ -33,6 +34,8 @@ export const fetchProjects = async (query: ProjectQuery) => {
     locality,
     builderId,
     possessionStatus,
+    propertyType,        // ← changed from propertyType
+    bhk,
     minPrice,
     maxPrice,
     isFeatured,
@@ -48,9 +51,9 @@ export const fetchProjects = async (query: ProjectQuery) => {
   // ── Sorting ───────────────────────────────────────────────
   let orderBy: Prisma.ProjectOrderByWithRelationInput = { createdAt: "desc" };
 
-  if (sort === "price_asc")  orderBy = { minPrice: "asc"     };
-  if (sort === "price_desc") orderBy = { minPrice: "desc"    };
-  if (sort === "latest")     orderBy = { createdAt: "desc"   };
+  if (sort === "price_asc")  orderBy = { minPrice: "asc"   };
+  if (sort === "price_desc") orderBy = { minPrice: "desc"  };
+  if (sort === "latest")     orderBy = { createdAt: "desc"  };
   if (sort === "popular")    orderBy = { leads: { _count: "desc" } };
 
   // ── Filters ───────────────────────────────────────────────
@@ -60,17 +63,39 @@ export const fetchProjects = async (query: ProjectQuery) => {
   if (locality)         where.locality         = { slug: locality };
   if (builderId)        where.builderId        = Number(builderId);
   if (possessionStatus) where.possessionStatus = possessionStatus as any;
+
+  // ← fixed: projectType instead of propertyType
+  if (propertyType) {
+    where.projectType = propertyType as PropertyType;
+  }
+
   if (isFeatured  === "true") where.isFeatured  = true;
   if (isTrending  === "true") where.isTrending  = true;
   if (isNewLaunch === "true") where.isNewLaunch = true;
 
+  // ── Merge configs filters (don't overwrite) ─────────────────
+  const configFilters: Prisma.ProjectConfigListRelationFilter = { some: {} };
+
   if (minPrice || maxPrice) {
-    where.minPrice = {};
-    if (minPrice) (where.minPrice as any).gte = BigInt(minPrice);
-    if (maxPrice) (where.minPrice as any).lte = BigInt(maxPrice);
+    configFilters.some!.price = {
+      ...(minPrice && { gte: BigInt(minPrice) }),
+      ...(maxPrice && { lte: BigInt(maxPrice) }),
+    };
+  }
+
+  if (bhk) {
+    configFilters.some!.unitType = { startsWith: bhk };
+  }
+
+  // Only attach configs filter if we actually built one
+  if (Object.keys(configFilters.some!).length > 0) {
+    where.configs = configFilters;
   }
 
   // ── Query ─────────────────────────────────────────────────
+  const cacheKey = cacheKeyFromQuery("projects:list", query as Record<string, unknown>);
+
+  return cacheRemember(cacheKey, 60, async () => {
   const [projects, total] = await Promise.all([
     prisma.project.findMany({
       where,
@@ -84,10 +109,30 @@ export const fetchProjects = async (query: ProjectQuery) => {
           orderBy: { sortOrder: "asc" },
         },
         floorPlans: {
-          select: { bhkType: true, price: true, carpetArea: true },
           orderBy: { bhkType: "asc" },
+          select: {
+            id: true,
+            bhkType: true,
+            name: true,
+            carpetArea: true,
+            builtUpArea: true,
+            superArea: true,
+            price: true,
+            imageUrl: true,
+          },
         },
-        configs: true,
+        amenities: { include: { amenity: true } },
+        configs: {
+          select: {
+            unitType: true,
+            buildAreaRange: true,
+            carpetArea: true,
+            bastu_Info: true,
+            price: true,
+            units: true,
+          },
+          orderBy: { price: "asc" },
+        },
         _count: { select: { properties: true, leads: true } },
       },
       orderBy,
@@ -108,6 +153,7 @@ export const fetchProjects = async (query: ProjectQuery) => {
       hasPrev:    currentPage > 1,
     },
   };
+  });
 };
 
 // ============================================================
@@ -116,7 +162,8 @@ export const fetchProjects = async (query: ProjectQuery) => {
 // ============================================================
 
 export const fetchProjectBySlug = async (slug: string) => {
-  return prisma.project.findUnique({
+  return cacheRemember(`project:slug:${slug}`, 180, () =>
+  prisma.project.findUnique({
     where: { slug },
     include: {
       builder:  true,
@@ -135,7 +182,8 @@ export const fetchProjectBySlug = async (slug: string) => {
       },
       _count: { select: { properties: true, leads: true } },
     },
-  });
+  })
+  );
 };
 
 // ============================================================
@@ -190,6 +238,20 @@ export const fetchFeaturedProjects = async (citySlug?: string) => {
             sortOrder: "asc",
           },
         },
+        amenities:  { include: { amenity: true } },
+        configs: {
+          select: {
+            unitType: true,
+            buildAreaRange: true,
+            carpetArea: true,
+            bastu_Info: true,
+            price: true,
+            units: true,
+          },
+          orderBy: {
+            price: "asc",
+          },
+        },
 
         floorPlans: {
           select: {
@@ -221,6 +283,10 @@ export const fetchProjectsByBuilder = async (
   page:  number = 1,
   limit: number = 10
 ) => {
+  return cacheRemember(
+    `projects:builder:${builderSlug}:${page}:${limit}`,
+    120,
+    async () => {
   const builder = await prisma.builder.findUnique({
     where:  { slug: builderSlug },
     select: {
@@ -270,4 +336,154 @@ export const fetchProjectsByBuilder = async (
       totalPages: Math.ceil(total / limit),
     },
   };
+    }
+  );
 };
+
+
+export const fetchProjectById = async (id: number) => {
+  return cacheRemember(`project:id:${id}`, 60, () =>
+  prisma.project.findUnique({
+    where: { id },
+    include: {
+      builder: true,
+
+      city: {
+        include: {
+          state: true,
+        },
+      },
+
+      locality: true,
+
+      images: {
+        orderBy: {
+          sortOrder: "asc",
+        },
+      },
+
+      configs: {
+        orderBy: {
+          unitType: "asc",
+        },
+      },
+
+      amenities: {
+        include: {
+          amenity: true,
+        },
+      },
+
+      nearbyPlaces: true,
+
+      floorPlans: true,
+    },
+  })
+  );
+};
+
+
+export async function getFilterCounts() {
+  return cacheRemember("projects:filter-counts", 300, async () => {
+  const [
+    projectTypes,
+    possessionStatuses,
+    newLaunchCount,
+    bhkCounts,
+  ] = await Promise.all([
+    prisma.project.groupBy({
+      by: ["projectType"],
+      where: {
+        isActive: true,
+      },
+      _count: {
+        _all: true,
+      },
+    }),
+
+    prisma.project.groupBy({
+      by: ["possessionStatus"],
+      where: {
+        isActive: true,
+      },
+      _count: {
+        _all: true,
+      },
+    }),
+
+    prisma.project.count({
+      where: {
+        isActive: true,
+        isNewLaunch: true,
+      },
+    }),
+
+    prisma.projectConfig.groupBy({
+      by: ["bedRoom"],
+      _count: {
+        _all: true,
+      },
+    }),
+  ]);
+
+  return {
+    status: {
+      NEW_LAUNCH: newLaunchCount,
+
+      UNDER_CONSTRUCTION:
+        possessionStatuses.find(
+          (x) => x.possessionStatus === "UNDER_CONSTRUCTION"
+        )?._count._all ?? 0,
+
+      READY_TO_MOVE:
+        possessionStatuses.find(
+          (x) => x.possessionStatus === "READY_TO_MOVE"
+        )?._count._all ?? 0,
+    },
+
+    types: {
+      APARTMENT:
+        projectTypes.find((x) => x.projectType === "APARTMENT")?._count._all ??
+        0,
+
+      VILLA:
+        projectTypes.find((x) => x.projectType === "VILLA")?._count._all ?? 0,
+
+      PLOT:
+        projectTypes.find((x) => x.projectType === "PLOT")?._count._all ?? 0,
+
+      BUILDER_FLOOR:
+        projectTypes.find(
+          (x) => x.projectType === "BUILDER_FLOOR"
+        )?._count._all ?? 0,
+    },
+
+    bhk: {
+      "1":
+        bhkCounts.find((x) => x.bedRoom === "1")?._count._all ??
+        bhkCounts.find((x) => x.bedRoom === "1 BHK")?._count._all ??
+        0,
+
+      "2":
+        bhkCounts.find((x) => x.bedRoom === "2")?._count._all ??
+        bhkCounts.find((x) => x.bedRoom === "2 BHK")?._count._all ??
+        0,
+
+      "3":
+        bhkCounts.find((x) => x.bedRoom === "3")?._count._all ??
+        bhkCounts.find((x) => x.bedRoom === "3 BHK")?._count._all ??
+        0,
+
+      "4":
+        bhkCounts.find((x) => x.bedRoom === "4")?._count._all ??
+        bhkCounts.find((x) => x.bedRoom === "4 BHK")?._count._all ??
+        0,
+
+      "5+":
+        bhkCounts
+          .filter((x) => x.bedRoom?.startsWith("5"))
+          .reduce((sum, x) => sum + x._count._all, 0),
+    },
+  };
+  });
+}

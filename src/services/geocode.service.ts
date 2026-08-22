@@ -8,30 +8,45 @@ interface GeocodeInput {
 export const geocodeAddress = async ({
   address,
 }: GeocodeInput) => {
-  if (!address) {
+  if (!address?.trim()) {
     throw new Error("ADDRESS_REQUIRED");
   }
 
   const apiKey = process.env.GOOGLE_MAPS_API_KEY;
 
+  if (!apiKey) {
+    throw new Error("GEOCODE_NOT_CONFIGURED");
+  }
+
   const response = await axios.get(
     "https://maps.googleapis.com/maps/api/geocode/json",
     {
       params: {
-        address,
+        address: address.trim(),
         key: apiKey,
+        region: "in",
+        language: "en",
       },
     }
   );
 
-  if (
-    response.data.status !== "OK" ||
-    !response.data.results.length
-  ) {
+  const { status, error_message: googleError, results } = response.data;
+
+  if (status !== "OK" || !results?.length) {
+    console.error("GEOCODE GOOGLE STATUS:", status, googleError || "");
+
+    if (
+      status === "REQUEST_DENIED" ||
+      status === "INVALID_REQUEST" ||
+      /expired|invalid|denied/i.test(googleError || "")
+    ) {
+      throw new Error("GEOCODE_API_DENIED");
+    }
+
     throw new Error("LOCATION_NOT_FOUND");
   }
 
-  const result = response.data.results[0];
+  const result = results[0];
   const components = result.address_components;
 
   const getComponent = (type: string) =>
@@ -46,8 +61,8 @@ export const geocodeAddress = async ({
 
   const cityName =
     getComponent("locality") ||
-    getComponent("postal_town") ||
-    getComponent("administrative_area_level_2");
+    getComponent("administrative_area_level_2") ||
+    getComponent("postal_town");
 
   const stateName =
     getComponent("administrative_area_level_1");
@@ -69,24 +84,31 @@ export const geocodeAddress = async ({
       })
     : null;
 
-  const citySearchName =
-  localityName || cityName;
-
   let city = null;
 
-  if (state && citySearchName) {
+  if (state && cityName) {
     city = await prisma.city.findFirst({
       where: {
         stateId: state.id,
         name: {
-          contains: citySearchName,
+          contains: cityName,
           mode: "insensitive",
         },
       },
     });
   }
-  console.log(
-  JSON.stringify(result.address_components, null, 2));
+
+  if (!city && state && localityName) {
+    city = await prisma.city.findFirst({
+      where: {
+        stateId: state.id,
+        name: {
+          contains: localityName,
+          mode: "insensitive",
+        },
+      },
+    });
+  }
 
   return {
     address: result.formatted_address,

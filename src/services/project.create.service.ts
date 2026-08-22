@@ -1,7 +1,8 @@
 import prisma from "../lib/prisma";
 import cloudinary from "../config/cloudinary";
 import { CreateProjectInput, UpdateProjectInput,AddProjectConfigsInput } from "../validations/project.validation";
-
+import { calculateROI, generateInvestmentTagline } from "./roi.service";
+import { invalidateProjectCaches } from "../utils/cache";
 
 import { Prisma } from "@prisma/client";
 
@@ -155,7 +156,7 @@ const uploadToCloudinary = (
 
 export const addProject = async (
   data:  CreateProjectInput,
-  files: Express.Multer.File[]
+  files: { buffer: Buffer }[]
 ) => {
   
   let uploadCityName = data.cityName ?? "";
@@ -268,6 +269,17 @@ export const addProject = async (
         builderId = builder.id;
       }
 
+
+      const roiInputs = {
+        expectedRentMonthly: data.expectedRentMonthly,
+        appreciationRate: data.appreciationRate,
+        rentalDemand: data.rentalDemand,
+        nearbyInfrastructure: data.nearbyInfrastructure,
+      };
+      const roi = calculateROI(roiInputs, data.minPrice ? BigInt(data.minPrice) : null);
+      const investmentTagline = roi ? generateInvestmentTagline(roi, roiInputs) : null;
+
+
       let slug = generateSlug(
         data.name,
         cityName
@@ -293,11 +305,21 @@ export const addProject = async (
           name:             data.name,
           slug,
           builderId,
+          expectedRentMonthly: data.expectedRentMonthly ?? null,
+          appreciationRate: data.appreciationRate ?? null,
+          rentalDemand: data.rentalDemand ?? null,
+          nearbyInfrastructure: data.nearbyInfrastructure ?? null,
+          rentalYield: roi?.rentalYield ?? null,
+          investmentScore: roi?.investmentScore ?? null,
+          paybackYears: roi?.paybackYears ?? null,
+          isInvestmentHotspot: roi?.isInvestmentHotspot ?? false,
+          investmentTagline,
           configs: {
             create: data.configs.map((config) => ({
               unitType: config.unitType,
               buildAreaRange: config.buildAreaRange,
               carpetArea: config.carpetArea,
+              bastu_Info:config.bastu_Info,
               bedRoom: config.bedRoom,
               livingArea: config.livingArea,
               kitchen: config.kitchen,
@@ -325,6 +347,7 @@ export const addProject = async (
           minPrice:         data.minPrice ? BigInt(data.minPrice) : undefined,
           maxPrice:         data.maxPrice ? BigInt(data.maxPrice) : undefined,
           possessionStatus: data.possessionStatus ?? "UNDER_CONSTRUCTION",
+          projectType: data.projectType ?? "APARTMENT",
           launchDate:       data.launchDate     ? new Date(data.launchDate)     : undefined,
           possessionDate:   data.possessionDate ? new Date(data.possessionDate) : undefined,
           reraNumber:       data.reraNumber,
@@ -377,6 +400,7 @@ export const addProject = async (
     return project;
     }
   );
+  await invalidateProjectCaches();
   return project;
 };
 
@@ -394,7 +418,13 @@ export const editProject = async (
 
   const existing = await prisma.project.findUnique({
     where:  { id },
-    select: { id: true },
+    select: { id: true,
+      minPrice: true,
+      expectedRentMonthly: true,
+      appreciationRate: true,
+      rentalDemand: true,
+      nearbyInfrastructure: true,
+     },
   });
   if (!existing) throw new Error("PROJECT_NOT_FOUND");
 
@@ -421,7 +451,58 @@ export const editProject = async (
     builderId = builder.id;
   }
 
-  return prisma.project.update({
+    // ── ROI Recalculation ─────────────────────────────────
+  let roiUpdates: Record<string, any> = {};
+
+  const shouldRecalculateROI =
+    data.expectedRentMonthly !== undefined ||
+    data.appreciationRate !== undefined ||
+    data.rentalDemand !== undefined ||
+    data.nearbyInfrastructure !== undefined ||
+    data.minPrice !== undefined;
+
+  if (shouldRecalculateROI && existing) {
+    const roiInputs = {
+      expectedRentMonthly:
+        data.expectedRentMonthly ?? existing.expectedRentMonthly ?? undefined,
+
+      appreciationRate:
+        data.appreciationRate ?? existing.appreciationRate ?? undefined,
+
+      rentalDemand:
+        (data.rentalDemand ?? existing.rentalDemand ?? undefined) as
+          | "HIGH"
+          | "MEDIUM"
+          | "LOW"
+          | undefined,
+
+      nearbyInfrastructure:
+        data.nearbyInfrastructure ?? existing.nearbyInfrastructure ?? undefined,
+    };
+
+    const minPrice =
+      data.minPrice !== undefined
+        ? BigInt(data.minPrice)
+        : existing.minPrice;
+
+    const roi = calculateROI(roiInputs, minPrice);
+
+    if (roi) {
+      roiUpdates = {
+        rentalYield: roi.rentalYield,
+        investmentScore: roi.investmentScore,
+        paybackYears: roi.paybackYears,
+        isInvestmentHotspot: roi.isInvestmentHotspot,
+        investmentTagline: generateInvestmentTagline(
+          roi,
+          roiInputs
+        ),
+      };
+    }
+  }
+
+
+  const project = await prisma.project.update({
     where: { id },
     data: {
       ...(builderId !== undefined && {
@@ -458,6 +539,10 @@ export const editProject = async (
 
       ...(data.possessionStatus !== undefined && {
         possessionStatus: data.possessionStatus,
+      }),
+
+      ...(data.projectType !== undefined && {
+        projectType: data.projectType,
       }),
 
       ...(data.reraNumber !== undefined && {
@@ -515,8 +600,18 @@ export const editProject = async (
       ...(data.possessionDate !== undefined && {
         possessionDate: new Date(data.possessionDate),
       }),
-    },
+      // ── ROI input fields ──────────────────────────────────
+      ...(data.expectedRentMonthly !== undefined && { expectedRentMonthly: data.expectedRentMonthly }),
+      ...(data.appreciationRate !== undefined && { appreciationRate: data.appreciationRate }),
+      ...(data.rentalDemand !== undefined && { rentalDemand: data.rentalDemand }),
+      ...(data.nearbyInfrastructure !== undefined && { nearbyInfrastructure: data.nearbyInfrastructure }),
+
+      // ── ROI calculated fields ─────────────────────────────
+      ...roiUpdates,
+      },
   });
+  await invalidateProjectCaches();
+  return project;
 };
 // ============================================================
 // ADD IMAGES TO PROJECT
@@ -525,7 +620,7 @@ export const editProject = async (
 export const addProjectImages = async (
   projectId:     number,
   requesterRole: string,
-  files:         Express.Multer.File[]
+  files:         { buffer: Buffer }[]
 ) => {
   if (requesterRole !== "ADMIN") throw new Error("FORBIDDEN");
 
@@ -555,6 +650,7 @@ export const addProjectImages = async (
   );
 
   await prisma.projectImage.createMany({ data: uploadedImages });
+  await invalidateProjectCaches();
 
   return prisma.project.findUnique({
     where:   { id: projectId },
@@ -595,7 +691,7 @@ export const removeProject = async (
   }
 
   // Decrement builder count
- return prisma.$transaction(async (tx) => {
+  const updated = await prisma.$transaction(async (tx) => {
   await tx.builder.update({
     where: { id: existing.builderId },
     data: {
@@ -612,6 +708,8 @@ export const removeProject = async (
     },
   });
 });
+  await invalidateProjectCaches();
+  return updated;
 };
 
  
@@ -637,7 +735,7 @@ export const addProjectConfigs = async (
     throw new Error("PROJECT_NOT_FOUND");
   }
 
-  return prisma.$transaction(async (tx) => {
+  const updated = await prisma.$transaction(async (tx) => {
     await tx.projectConfig.deleteMany({
       where: {
         projectId,
@@ -652,7 +750,7 @@ export const addProjectConfigs = async (
 
         buildAreaRange: config.buildAreaRange,
         carpetArea: config.carpetArea,
-
+        bastu_Info: config.bastu_Info,
         bedRoom: config.bedRoom,
         livingArea: config.livingArea,
         kitchen: config.kitchen,
@@ -682,4 +780,6 @@ export const addProjectConfigs = async (
       },
     });
   });
+  await invalidateProjectCaches();
+  return updated;
 };

@@ -4,6 +4,9 @@ import {
   getFeaturedProjects,
   getProjectBySlug,
   getProjectsByBuilder,
+  getProjectById,
+  getFilterCounts,
+  getTopInvestmentProjects
 } from "../controllers/project.controller";
 
 import {
@@ -27,7 +30,7 @@ router.get("/featured",              getFeaturedProjects);   // GET /projects/fe
 router.get("/builder/:builderSlug",  getProjectsByBuilder);  // GET /projects/builder/kalinga-constructions
 router.get("/",                      getProjects);           // GET /projects
 router.get("/:slug",                 getProjectBySlug);      // GET /projects/kalinga-greenfields-patia
-
+router.get("/id/:id",                   getProjectById);
 router.post(
   "/",
   upload.array("images", 20),
@@ -38,7 +41,7 @@ router.post(
   "/projects/:id/configs",
   updateProjectConfigs
 );
-
+router.get("/investment/top-investments", getTopInvestmentProjects);
  
 router.patch("/:id",  protect, adminOnly, updateProject);
 router.delete("/:id", protect, adminOnly, deleteProject);
@@ -50,6 +53,9 @@ router.post(
   upload.array("images", 20),
   uploadProjectImages
 );
-
+router.get(
+  "/filter-counts",
+  getFilterCounts
+);
 //router.post("/:projectId/properties", createPropertyForProject);
 export default router;

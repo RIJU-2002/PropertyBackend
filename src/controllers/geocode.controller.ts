@@ -26,6 +26,21 @@ export const geocodeLocation = async (
       });
     }
 
+    if (error.message === "GEOCODE_NOT_CONFIGURED") {
+      return res.status(503).json({
+        success: false,
+        message: "Google Maps API key is missing in api/.env",
+      });
+    }
+
+    if (error.message === "GEOCODE_API_DENIED") {
+      return res.status(502).json({
+        success: false,
+        message:
+          "Google Maps Geocoding is blocked. Create a new API key, enable Geocoding API + billing, and update GOOGLE_MAPS_API_KEY.",
+      });
+    }
+
     if (error.message === "LOCATION_NOT_FOUND") {
       return res.status(404).json({
         success: false,

@@ -30,13 +30,19 @@ const toNumber = (v: any) => {
   return isNaN(n) ? undefined : n;
 };
 
-const toBool = (v: any) => v === "true" ? true : v === "false" ? false : undefined;
+const toBool = (v: any) => {
+  if (typeof v === "boolean") return v;
+  if (v === "true") return true;
+  if (v === "false") return false;
+  return undefined;
+};
 
 const parseJsonArray = (value: any) => {
+  if (Array.isArray(value)) return value;
   try {
-    return value ? JSON.parse(value) : [];
+    return value ? JSON.parse(value) : undefined;
   } catch {
-    return [];
+    return undefined;
   }
 };
 
@@ -53,13 +59,17 @@ const parseFormFields = (body: any) => {
     cityName: body.cityName ?? body.city ?? undefined,
     localityName: body.localityName ?? body.locality ?? undefined,
 
-    minPrice: body.minPrice ? Number(body.minPrice) : undefined,
-    maxPrice: body.maxPrice ? Number(body.maxPrice) : undefined,
+    minPrice: body.minPrice ? String(body.minPrice).replace(/[^\d]/g, "") || undefined : undefined,
+    maxPrice: body.maxPrice ? String(body.maxPrice).replace(/[^\d]/g, "") || undefined : undefined,
+
+    expectedRentMonthly: toNumber(body.expectedRentMonthly),
+    appreciationRate: toNumber(body.appreciationRate),
+    rentalDemand: body.rentalDemand || undefined,
+    nearbyInfrastructure: body.nearbyInfrastructure || undefined,
 
     description: body.description ?? undefined,
     address: body.address ?? undefined,
 
-    // ADD THESE
     reraNumber: body.reraNumber ?? undefined,
     launchDate: body.launchDate ?? undefined,
     possessionDate: body.possessionDate ?? undefined,
@@ -74,15 +84,17 @@ const parseFormFields = (body: any) => {
     longitude: toNumber(body.longitude),
 
     possessionStatus: body.possessionStatus,
+    projectType: body.projectType ?? body.propertyType,
 
     isFeatured: toBool(body.isFeatured),
     isTrending: toBool(body.isTrending),
     isNewLaunch: toBool(body.isNewLaunch),
     isActive: toBool(body.isActive),
+    isVerified: toBool(body.isVerified),
 
-    amenityIds: body.amenityIds ? parseJsonArray(body.amenityIds) : [],
-    floorPlans: body.floorPlans ? parseJsonArray(body.floorPlans) : [],
-    configs: body.configs ? parseJsonArray(body.configs) : [],
+    amenityIds: body.amenityIds !== undefined ? parseJsonArray(body.amenityIds) : undefined,
+    floorPlans: body.floorPlans !== undefined ? parseJsonArray(body.floorPlans) : undefined,
+    configs: body.configs !== undefined ? parseJsonArray(body.configs) : undefined,
   };
 };
 

@@ -5,21 +5,80 @@ import prisma from "../lib/prisma";
 // ============================================================
 
 interface SubmitLeadInput {
-  // What they're enquiring about — one of these must be present
   propertyId?: number;
   projectId?:  number;
-
-  // Guest fields — used when user is NOT logged in
   guestName?:  string;
   guestPhone?: string;
   guestEmail?: string;
-
-  // Lead details
   message?:       string;
-  budget?:        string;  // BigInt as string
+  budget?:        string;
   bhkPreference?: number[];
   source?:        string;
+  agentId?:       number;
 }
+
+const agentSelect = {
+  id: true,
+  agencyName: true,
+  isVerified: true,
+  isActive: true,
+  user: {
+    select: {
+      id: true,
+      name: true,
+      phone: true,
+      email: true,
+    },
+  },
+} as const;
+
+const leadInclude = {
+  property: { select: { title: true, slug: true, price: true } },
+  project:  { select: { name: true, slug: true } },
+  agent:    { select: agentSelect },
+  buyer: {
+    select: {
+      id: true,
+      name: true,
+      phone: true,
+      email: true,
+    },
+  },
+} as const;
+
+const pickAvailableAgent = async (): Promise<number | undefined> => {
+  const agent = await prisma.agent.findFirst({
+    where: { isActive: true },
+    orderBy: [
+      { isVerified: "desc" },
+      { leads: { _count: "asc" } },
+    ],
+    select: { id: true },
+  });
+
+  return agent?.id;
+};
+
+const resolveAgentId = async (
+  requestedAgentId?: number,
+  propertyAgentId?: number | null
+): Promise<number | undefined> => {
+  if (requestedAgentId) {
+    const agent = await prisma.agent.findUnique({
+      where: { id: requestedAgentId },
+      select: { id: true, isActive: true },
+    });
+
+    if (!agent) throw new Error("AGENT_NOT_FOUND");
+    if (!agent.isActive) throw new Error("AGENT_INACTIVE");
+
+    return agent.id;
+  }
+
+  if (propertyAgentId) return propertyAgentId;
+
+  return pickAvailableAgent();
+};
 
 // ============================================================
 // SUBMIT LEAD (enquiry form)
@@ -28,36 +87,30 @@ interface SubmitLeadInput {
 
 export const submitLead = async (
   data:    SubmitLeadInput,
-  buyerId: number | null   // null if guest
+  buyerId: number | null
 ) => {
-  // Must enquire about something
-  if (!data.propertyId && !data.projectId) {
-    throw new Error("MISSING_TARGET");
-  }
-
-  // Guest must provide phone
   if (!buyerId && !data.guestPhone) {
     throw new Error("GUEST_PHONE_REQUIRED");
   }
 
-  // Check for duplicate lead — same user/phone + same property in last 24hrs
-  const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  if (data.propertyId || data.projectId) {
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
-  const duplicate = await prisma.lead.findFirst({
-    where: {
-      ...(buyerId
-        ? { buyerId }
-        : { guestPhone: data.guestPhone }),
-      ...(data.propertyId ? { propertyId: data.propertyId } : {}),
-      ...(data.projectId  ? { projectId:  data.projectId  } : {}),
-      createdAt: { gt: oneDayAgo },
-    },
-  });
+    const duplicate = await prisma.lead.findFirst({
+      where: {
+        ...(buyerId
+          ? { buyerId }
+          : { guestPhone: data.guestPhone }),
+        ...(data.propertyId ? { propertyId: data.propertyId } : {}),
+        ...(data.projectId  ? { projectId:  data.projectId  } : {}),
+        createdAt: { gt: oneDayAgo },
+      },
+    });
 
-  if (duplicate) throw new Error("DUPLICATE_LEAD");
+    if (duplicate) throw new Error("DUPLICATE_LEAD");
+  }
 
-  // Find the agent assigned to the property (if any)
-  let agentId: number | undefined;
+  let propertyAgentId: number | null | undefined;
 
   if (data.propertyId) {
     const property = await prisma.property.findUnique({
@@ -68,7 +121,7 @@ export const submitLead = async (
     if (!property)          throw new Error("PROPERTY_NOT_FOUND");
     if (!property.isActive) throw new Error("PROPERTY_NOT_ACTIVE");
 
-    agentId = property.agentId ?? undefined;
+    propertyAgentId = property.agentId;
   }
 
   if (data.projectId) {
@@ -79,6 +132,8 @@ export const submitLead = async (
 
     if (!project) throw new Error("PROJECT_NOT_FOUND");
   }
+
+  const agentId = await resolveAgentId(data.agentId, propertyAgentId);
 
   return prisma.lead.create({
     data: {
@@ -95,10 +150,7 @@ export const submitLead = async (
       status:        "NEW",
       source:        data.source ?? "listing_page",
     },
-    include: {
-      property: { select: { title: true, slug: true } },
-      project:  { select: { name:  true, slug: true } },
-    },
+    include: leadInclude,
   });
 };
 
@@ -171,6 +223,7 @@ export const fetchAgentLeads = async (
         project: {
           select: { name: true, slug: true },
         },
+        agent: { select: agentSelect },
       },
       orderBy: { createdAt: "desc" },
       skip,
@@ -242,5 +295,111 @@ export const updateLeadStatus = async (
         ? new Date(followUpAt)
         : undefined,
     },
+    include: leadInclude,
   });
+};
+
+export const fetchAdminLeads = async (
+  page = 1,
+  limit = 20,
+  status?: string,
+  agentId?: number,
+  unassigned?: boolean
+) => {
+  const skip = (page - 1) * limit;
+
+  const where: any = {};
+  if (status) where.status = status;
+  if (unassigned) where.agentId = null;
+  else if (agentId) where.agentId = agentId;
+
+  const [leads, total] = await Promise.all([
+    prisma.lead.findMany({
+      where,
+      include: leadInclude,
+      orderBy: { createdAt: "desc" },
+      skip,
+      take: limit,
+    }),
+    prisma.lead.count({ where }),
+  ]);
+
+  return {
+    leads,
+    pagination: {
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit) || 1,
+      hasNext: page < Math.ceil(total / limit),
+      hasPrev: page > 1,
+    },
+  };
+};
+
+export const assignLeadToAgent = async (
+  leadId: number,
+  agentId: number
+) => {
+  const lead = await prisma.lead.findUnique({
+    where: { id: leadId },
+    select: { id: true },
+  });
+
+  if (!lead) throw new Error("LEAD_NOT_FOUND");
+
+  const agent = await prisma.agent.findUnique({
+    where: { id: agentId },
+    select: { id: true, isActive: true },
+  });
+
+  if (!agent) throw new Error("AGENT_NOT_FOUND");
+  if (!agent.isActive) throw new Error("AGENT_INACTIVE");
+
+  return prisma.lead.update({
+    where: { id: leadId },
+    data: { agentId: agent.id },
+    include: leadInclude,
+  });
+};
+
+export const fetchLeadSummary = async () => {
+  const [total, byStatus, byAgent] = await Promise.all([
+    prisma.lead.count(),
+    prisma.lead.groupBy({
+      by: ["status"],
+      _count: { _all: true },
+    }),
+    prisma.lead.groupBy({
+      by: ["agentId"],
+      _count: { _all: true },
+    }),
+  ]);
+
+  const agentIds = byAgent
+    .map((row) => row.agentId)
+    .filter((id): id is number => id !== null);
+
+  const agents = agentIds.length
+    ? await prisma.agent.findMany({
+        where: { id: { in: agentIds } },
+        select: agentSelect,
+      })
+    : [];
+
+  const agentMap = new Map(agents.map((agent) => [agent.id, agent]));
+
+  return {
+    total,
+    unassigned: byAgent.find((row) => row.agentId === null)?._count._all ?? 0,
+    byStatus: byStatus.map((row) => ({
+      status: row.status,
+      count: row._count._all,
+    })),
+    byAgent: byAgent.map((row) => ({
+      agentId: row.agentId,
+      count: row._count._all,
+      agent: row.agentId ? agentMap.get(row.agentId) ?? null : null,
+    })),
+  };
 };

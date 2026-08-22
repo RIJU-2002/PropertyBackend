@@ -12,6 +12,26 @@ const PossessionStatusEnum = z.enum([
   "NEW_LAUNCH",
 ]);
 
+
+const ProjectTypeEnum = z.enum([
+  "APARTMENT",
+  "VILLA",
+  "PLOT",
+  "INDEPENDENT_HOUSE",
+  "BUILDER_FLOOR",
+  "PENTHOUSE",
+  "STUDIO",
+  "COMMERCIAL_OFFICE",
+  "COMMERCIAL_SHOP",
+  "WAREHOUSE"
+]);
+
+
+const ProjectRentalDemand = z.enum([
+  "HIGH",
+  "LOW",
+  "MEDIUM"
+])
 // ============================================================
 // FLOOR PLAN SCHEMA
 // ============================================================
@@ -41,6 +61,8 @@ const projectConfigSchema = z.object({
 
   buildAreaRange: z.string().optional(),
   carpetArea: z.string().optional(),
+
+  bastu_Info: z.string().optional(),
 
   bedRoom: z.string().optional(),
   livingArea: z.string().optional(),
@@ -84,6 +106,11 @@ const projectBaseSchema = z.object({
 
   builderName: z.string().optional(),
 
+  //ROI details
+  expectedRentMonthly: z.coerce.number().positive().optional(),
+  appreciationRate: z.coerce.number().min(0).max(50).optional(),
+  rentalDemand: ProjectRentalDemand.optional(),
+  nearbyInfrastructure: z.string().trim().max(500).optional(),
   // ── Location ──────────────────────────────────────────────
   cityId: z.number().int().positive().optional(),
   localityId: z.number().int().positive().optional(),
@@ -117,7 +144,7 @@ const projectBaseSchema = z.object({
   possessionStatus: PossessionStatusEnum.default(
     "UNDER_CONSTRUCTION"
   ),
-
+  projectType: ProjectTypeEnum.default("APARTMENT"),
   launchDate: z.string().optional(),
   possessionDate: z.string().optional(),
 
@@ -223,6 +250,15 @@ export const updateProjectSchema = projectBaseSchema
   .extend({
     isActive: z.boolean().optional(),
     isVerified: z.boolean().optional(),
+    rentalDemand: ProjectRentalDemand.optional(),
+    possessionStatus: PossessionStatusEnum.optional(),
+    projectType: ProjectTypeEnum.optional(),
+    isFeatured: z.boolean().optional(),
+    isTrending: z.boolean().optional(),
+    isNewLaunch: z.boolean().optional(),
+    amenityIds: z.array(z.number().int().positive()).optional(),
+    floorPlans: z.array(floorPlanSchema).optional(),
+    configs: z.array(projectConfigSchema).optional(),
   });
 
 
@@ -233,6 +269,7 @@ export const updateProjectSchema = projectBaseSchema
 
       buildAreaRange: z.string().optional(),
       carpetArea: z.string().optional(),
+      bastu_Info: z.string().optional(),
 
       bedRoom: z.string().optional(),
       livingArea: z.string().optional(),
