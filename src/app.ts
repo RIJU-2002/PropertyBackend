@@ -32,10 +32,17 @@ const app = express();
 
 app.use(helmet());
 
-app.use(cors({
-  origin: "*", // change in production frontend URL
-  credentials: true,
-}));
+const frontendOrigins = (process.env.FRONTEND_URL || "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+app.use(
+  cors({
+    origin: frontendOrigins.length ? frontendOrigins : true,
+    credentials: true,
+  })
+);
 
 // ============================================================
 // BODY PARSER
@@ -66,6 +73,10 @@ app.use(globalLimiter);
 
 app.get("/", (_req, res) => {
   res.send("API running...");
+});
+
+app.get("/health", (_req, res) => {
+  res.json({ success: true, status: "ok" });
 });
 
 

@@ -8,8 +8,9 @@
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "types": ["jest","node"]  
+    "ignoreDeprecations": "6.0",
+    "types": ["node"]
   },
-  "include": ["src/**/*", "__tests__/**/*"],  // ← must include __tests__
-  "exclude": ["node_modules", "dist"]
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "src/__tests__"]
 }
