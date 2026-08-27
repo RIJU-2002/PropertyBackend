@@ -62,9 +62,19 @@ export const updateLeadStatusSchema = z.object({
 });
 
 export const assignLeadSchema = z.object({
-  agentId: z.number().int().positive(),
+  // null = unassign (admin CMS)
+  agentId: z.number().int().positive().nullable(),
+});
+
+export const addLeadRemarkSchema = z.object({
+  body: z
+    .string()
+    .trim()
+    .min(1, "Remark cannot be empty")
+    .max(2000, "Remark must be under 2000 characters"),
 });
 
 export type SubmitLeadInput = z.infer<typeof submitLeadSchema>;
 export type AssignLeadInput = z.infer<typeof assignLeadSchema>;
 export type UpdateLeadStatusInput = z.infer<typeof updateLeadStatusSchema>;
+export type AddLeadRemarkInput = z.infer<typeof addLeadRemarkSchema>;

@@ -367,6 +367,7 @@ model User {
   updatedAt       DateTime         @updatedAt
   agent           Agent?
   leads           Lead[]           @relation("BuyerLeads")
+  leadRemarks     LeadRemark[]
   otps            Otp[]
   reviews         ProjectReview[]
   properties      Property[]
@@ -413,6 +414,7 @@ model Lead {
   buyer         User?      @relation("BuyerLeads", fields: [buyerId], references: [id])
   project       Project?   @relation(fields: [projectId], references: [id])
   property      Property?  @relation(fields: [propertyId], references: [id])
+  remarks       LeadRemark[]
 
   @@index([projectId, status])
   @@index([propertyId, status])
@@ -420,6 +422,19 @@ model Lead {
   @@index([guestPhone])
   @@index([agentId, status], map: "idx_lead_agent_status")
   @@index([buyerId, createdAt(sort: Desc)], map: "idx_lead_buyer")
+}
+
+model LeadRemark {
+  id        Int      @id @default(autoincrement())
+  leadId    Int
+  authorId  Int
+  body      String
+  createdAt DateTime @default(now())
+  lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([leadId, createdAt(sort: Desc)])
+  @@index([authorId])
 }
 
 model SavedProperty {

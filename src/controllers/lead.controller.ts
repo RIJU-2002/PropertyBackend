@@ -8,11 +8,14 @@ import {
   fetchAdminLeads,
   assignLeadToAgent,
   fetchLeadSummary,
+  fetchLeadRemarks,
+  addLeadRemark,
 } from "../services/lead.service";
 import {
   submitLeadSchema,
   updateLeadStatusSchema,
   assignLeadSchema,
+  addLeadRemarkSchema,
 } from "../validations/lead.validation";
 import prisma from "../lib/prisma";
 
@@ -205,7 +208,10 @@ export const assignLead = async (req: Request, res: Response) => {
 
     return res.json({
       success: true,
-      message: "Lead assigned to agent",
+      message:
+        agentId === null
+          ? "Lead unassigned"
+          : "Lead assigned to agent",
       data: safe(lead),
     });
   } catch (error: any) {
@@ -289,5 +295,97 @@ export const patchLeadStatus = async (req: Request, res: Response) => {
     }
 
     return res.status(500).json({ success: false, message: "Failed to update lead status" });
+  }
+};
+
+// ============================================================
+// GET /lead/:id/remarks
+// Admin or assigned agent only
+// ============================================================
+
+export const getLeadRemarks = async (req: Request, res: Response) => {
+  try {
+    const leadId = Number(req.params.id);
+    const userId = (req as any).user?.id;
+    const role = (req as any).user?.role;
+
+    if (!Number.isInteger(leadId) || leadId <= 0) {
+      return res.status(400).json({ success: false, message: "Invalid lead ID" });
+    }
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    const remarks = await fetchLeadRemarks(leadId, userId, role);
+
+    return res.json({ success: true, data: remarks });
+  } catch (error: any) {
+    console.error("GET LEAD REMARKS ERROR:", error);
+
+    if (error.message === "LEAD_NOT_FOUND") {
+      return res.status(404).json({ success: false, message: "Lead not found" });
+    }
+    if (error.message === "FORBIDDEN") {
+      return res.status(403).json({
+        success: false,
+        message: "Only admin or the assigned agent can view remarks",
+      });
+    }
+
+    return res.status(500).json({ success: false, message: "Failed to fetch remarks" });
+  }
+};
+
+// ============================================================
+// POST /lead/:id/remarks
+// Admin or assigned agent only
+// ============================================================
+
+export const createLeadRemark = async (req: Request, res: Response) => {
+  try {
+    const leadId = Number(req.params.id);
+    const userId = (req as any).user?.id;
+    const role = (req as any).user?.role;
+
+    if (!Number.isInteger(leadId) || leadId <= 0) {
+      return res.status(400).json({ success: false, message: "Invalid lead ID" });
+    }
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    const { body } = addLeadRemarkSchema.parse(req.body);
+    const remark = await addLeadRemark(leadId, userId, role, body);
+
+    return res.status(201).json({
+      success: true,
+      message: "Remark added",
+      data: remark,
+    });
+  } catch (error: any) {
+    console.error("CREATE LEAD REMARK ERROR:", error);
+
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({
+        success: false,
+        message: "Validation failed",
+        errors: error.issues.map((i) => ({
+          field: i.path.join("."),
+          message: i.message,
+        })),
+      });
+    }
+
+    if (error.message === "LEAD_NOT_FOUND") {
+      return res.status(404).json({ success: false, message: "Lead not found" });
+    }
+    if (error.message === "FORBIDDEN") {
+      return res.status(403).json({
+        success: false,
+        message: "Only admin or the assigned agent can add remarks",
+      });
+    }
+
+    return res.status(500).json({ success: false, message: "Failed to add remark" });
   }
 };
