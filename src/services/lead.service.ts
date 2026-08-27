@@ -1,4 +1,5 @@
 import prisma from "../lib/prisma";
+import redis from "../lib/redis";
 
 // ============================================================
 // TYPES
@@ -16,6 +17,8 @@ interface SubmitLeadInput {
   source?:        string;
   agentId?:       number;
 }
+
+const ROUND_ROBIN_KEY = "leads:round_robin:cursor";
 
 const agentSelect = {
   id: true,
@@ -46,23 +49,47 @@ const leadInclude = {
   },
 } as const;
 
-const pickAvailableAgent = async (): Promise<number | undefined> => {
-  const agent = await prisma.agent.findFirst({
+/**
+ * Round-robin across active agents.
+ * Uses Redis INCR for an atomic cursor; falls back to last assigned lead.
+ * Admin CMS reassignment does not move this cursor.
+ */
+const pickRoundRobinAgent = async (): Promise<number | undefined> => {
+  const agents = await prisma.agent.findMany({
     where: { isActive: true },
-    orderBy: [
-      { isVerified: "desc" },
-      { leads: { _count: "asc" } },
-    ],
+    orderBy: { id: "asc" },
     select: { id: true },
   });
 
-  return agent?.id;
+  if (agents.length === 0) return undefined;
+  if (agents.length === 1) return agents[0].id;
+
+  try {
+    if (process.env.NODE_ENV !== "test") {
+      const n = await redis.incr(ROUND_ROBIN_KEY);
+      const index = (Number(n) - 1) % agents.length;
+      return agents[index]?.id;
+    }
+  } catch (err) {
+    console.error("Round-robin Redis error, using DB fallback:", err);
+  }
+
+  const lastAssigned = await prisma.lead.findFirst({
+    where: { agentId: { not: null } },
+    orderBy: { createdAt: "desc" },
+    select: { agentId: true },
+  });
+
+  const lastIndex = agents.findIndex((a) => a.id === lastAssigned?.agentId);
+  const nextIndex = lastIndex >= 0 ? (lastIndex + 1) % agents.length : 0;
+  return agents[nextIndex].id;
 };
 
 const resolveAgentId = async (
   requestedAgentId?: number,
   propertyAgentId?: number | null
 ): Promise<number | undefined> => {
+  // Explicit agent from form / API wins
   if (requestedAgentId) {
     const agent = await prisma.agent.findUnique({
       where: { id: requestedAgentId },
@@ -75,9 +102,17 @@ const resolveAgentId = async (
     return agent.id;
   }
 
-  if (propertyAgentId) return propertyAgentId;
+  // Property-linked agent (if still active)
+  if (propertyAgentId) {
+    const agent = await prisma.agent.findUnique({
+      where: { id: propertyAgentId },
+      select: { id: true, isActive: true },
+    });
+    if (agent?.isActive) return agent.id;
+  }
 
-  return pickAvailableAgent();
+  // Default: round-robin among active agents
+  return pickRoundRobinAgent();
 };
 
 // ============================================================
@@ -339,7 +374,7 @@ export const fetchAdminLeads = async (
 
 export const assignLeadToAgent = async (
   leadId: number,
-  agentId: number
+  agentId: number | null
 ) => {
   const lead = await prisma.lead.findUnique({
     where: { id: leadId },
@@ -347,6 +382,15 @@ export const assignLeadToAgent = async (
   });
 
   if (!lead) throw new Error("LEAD_NOT_FOUND");
+
+  // Admin can clear assignment
+  if (agentId === null) {
+    return prisma.lead.update({
+      where: { id: leadId },
+      data: { agentId: null },
+      include: leadInclude,
+    });
+  }
 
   const agent = await prisma.agent.findUnique({
     where: { id: agentId },
@@ -402,4 +446,86 @@ export const fetchLeadSummary = async () => {
       agent: row.agentId ? agentMap.get(row.agentId) ?? null : null,
     })),
   };
+};
+
+// ============================================================
+// LEAD REMARKS — conversation notes (admin + assigned agent)
+// ============================================================
+
+const assertCanAccessLeadRemarks = async (
+  leadId: number,
+  userId: number,
+  role: string
+) => {
+  const lead = await prisma.lead.findUnique({
+    where: { id: leadId },
+    select: { id: true, agentId: true },
+  });
+
+  if (!lead) throw new Error("LEAD_NOT_FOUND");
+
+  if (role === "ADMIN") return lead;
+
+  if (role !== "AGENT") throw new Error("FORBIDDEN");
+
+  const agent = await prisma.agent.findUnique({
+    where: { userId },
+    select: { id: true },
+  });
+
+  if (!agent || lead.agentId !== agent.id) {
+    throw new Error("FORBIDDEN");
+  }
+
+  return lead;
+};
+
+export const fetchLeadRemarks = async (
+  leadId: number,
+  userId: number,
+  role: string
+) => {
+  await assertCanAccessLeadRemarks(leadId, userId, role);
+
+  return prisma.leadRemark.findMany({
+    where: { leadId },
+    orderBy: { createdAt: "asc" },
+    include: {
+      author: {
+        select: {
+          id: true,
+          name: true,
+          phone: true,
+          role: true,
+        },
+      },
+    },
+  });
+};
+
+export const addLeadRemark = async (
+  leadId: number,
+  userId: number,
+  role: string,
+  body: string
+) => {
+  await assertCanAccessLeadRemarks(leadId, userId, role);
+
+  return prisma.leadRemark.create({
+    data: {
+      leadId,
+      authorId: userId,
+      body,
+    },
+    include: {
+      author: {
+        select: {
+          id: true,
+          name: true,
+          phone: true,
+          role: true,
+        },
+      },
+    },
+  });
 };
