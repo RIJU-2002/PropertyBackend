@@ -15,6 +15,8 @@ interface ProjectQuery {
   propertyType?:    string;
   minPrice?:         string;
   maxPrice?:         string;
+  minArea?:          string;
+  maxArea?:          string;
   bhk?:              string;   // filter by available BHK types in floor plans
   isFeatured?:       string;
   isTrending?:       string;
@@ -38,6 +40,8 @@ export const fetchProjects = async (query: ProjectQuery) => {
     bhk,
     minPrice,
     maxPrice,
+    minArea,
+    maxArea,
     isFeatured,
     isTrending,
     isNewLaunch,
@@ -90,6 +94,24 @@ export const fetchProjects = async (query: ProjectQuery) => {
   // Only attach configs filter if we actually built one
   if (Object.keys(configFilters.some!).length > 0) {
     where.configs = configFilters;
+  }
+
+  const minAreaNum = minArea ? Number(minArea) : NaN;
+  const maxAreaNum = maxArea ? Number(maxArea) : NaN;
+  if (Number.isFinite(minAreaNum) || Number.isFinite(maxAreaNum)) {
+    const areaBounds: Prisma.FloatNullableFilter = {
+      ...(Number.isFinite(minAreaNum) ? { gte: minAreaNum } : {}),
+      ...(Number.isFinite(maxAreaNum) ? { lte: maxAreaNum } : {}),
+    };
+    where.floorPlans = {
+      some: {
+        OR: [
+          { carpetArea: areaBounds },
+          { builtUpArea: areaBounds },
+          { superArea: areaBounds },
+        ],
+      },
+    };
   }
 
   // ── Query ─────────────────────────────────────────────────
